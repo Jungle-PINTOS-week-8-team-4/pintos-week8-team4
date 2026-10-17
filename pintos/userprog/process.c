@@ -23,7 +23,7 @@
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
@@ -50,7 +50,7 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
-	/* Create a new thread to execute FILE_NAME. */
+	/* Create a new thread to execute FILE_NAME. */// -> 로직은 initd에서, 인자는 filename(fn_copy) str
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
@@ -200,10 +200,14 @@ process_exec (void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+
+	while(true){
+		thread_yield();
+	}
 	return -1;
 }
 
@@ -310,6 +314,8 @@ struct ELF64_PHDR {
 #define ELF ELF64_hdr
 #define Phdr ELF64_PHDR
 
+#define MAX_ARG_CNT 50
+
 static bool setup_stack (struct intr_frame *if_);
 static bool validate_segment (const struct Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
@@ -321,19 +327,28 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	
+	
+	char *arg_ptr[MAX_ARG_CNT]; // limits max. arg cnt to MAX_ARG_CNT
+	int argc = 0;
+	
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
-	process_activate (thread_current ());
+	process_activate (thread_current ()); 
+
+	char *saveptr; 
+	file_name = strtok_r(file_name, " ", &saveptr); 
+	arg_ptr[argc++] = 0; // puts offset from arr. start
 
 	/* Open executable file. */
 	file = filesys_open (file_name);
@@ -411,6 +426,39 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (!setup_stack (if_))
 		goto done;
 
+	char *stack_ptr = USER_STACK;
+		
+	for(char* start = strtok_r(NULL, " ", &saveptr); start != NULL; start = strtok_r(NULL, " ", &saveptr) ) {
+		if(argc + 1 >= MAX_ARG_CNT) goto done;
+		arg_ptr[argc++] = start - file_name;
+	}
+
+	
+	size_t file_len = saveptr - file_name + 1;
+	stack_ptr -= file_len;
+
+	for(int i = 0; i < argc; i++){
+		arg_ptr[i] += (size_t) stack_ptr;
+	}
+
+	memcpy(stack_ptr, file_name, sizeof(char) * file_len);
+	arg_ptr[argc] = NULL;
+
+	
+	stack_ptr -= sizeof(char *) * (argc + 1);
+	stack_ptr = ROUND_DOWN((size_t)stack_ptr - sizeof(char*), 16);
+	stack_ptr += sizeof(char*);
+	memcpy(stack_ptr, arg_ptr, sizeof(char *) * (argc + 1));
+	
+	
+	if_->R.rsi = stack_ptr;
+	if_->R.rdi = argc;
+
+	stack_ptr -= sizeof(char*);
+	*((char**)stack_ptr) = NULL;
+	
+	
+	if_->rsp = stack_ptr;
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
