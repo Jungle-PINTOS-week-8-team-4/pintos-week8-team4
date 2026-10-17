@@ -444,8 +444,10 @@ load (char *file_name, struct intr_frame *if_) {
 	memcpy(stack_ptr, file_name, sizeof(char) * file_len);
 	arg_ptr[argc] = NULL;
 
-	stack_ptr = ROUND_DOWN((size_t)stack_ptr, sizeof(size_t));
+	
 	stack_ptr -= sizeof(char *) * (argc + 1);
+	stack_ptr = ROUND_DOWN((size_t)stack_ptr - sizeof(char*), 16);
+	stack_ptr += sizeof(char*);
 	memcpy(stack_ptr, arg_ptr, sizeof(char *) * (argc + 1));
 	
 	
