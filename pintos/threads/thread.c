@@ -468,12 +468,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 	t->waiting_thread = NULL;
 	list_init(&t->acquired_lock); 
-#ifdef USERPROG
-	t->fd_arr = NULL;
-	t->fd_cnt = 0;
 	t->fd_cap = 0;
-#endif
-}
+	t->fd_arr = NULL;
+	
 
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is

@@ -217,4 +217,51 @@ fail:
 	file_close(f);
 	return -1;
 }
+			close ((int)f->R.rdi);
+			break;
+		case SYS_WAIT:
+			f->R.rax = process_wait ((tid_t) f->R.rdi);
+			break;
+		default:
+            exit (-1);
+            break;
+	}
+	
+
+	// printf ("system call!\n");
+	// thread_exit ();
+}
+int write (int fd, const void *buffer, unsigned size) {
+    //버퍼 포인터 유효성 검사. NULL이거나 유저 메모리 영역이 아니면 프로세스 종료
+    if (buffer == NULL || !is_user_vaddr (buffer))
+        exit (-1);
+	check_address(buffer);
+	check_address(buffer + size -1);
+
+    //표준 출력 (stdout, fd == 1)인 경우 콘솔에 쓰기
+    if (fd == STDOUT_FILENO) {      
+        putbuf (buffer, size);
+        return size;
+    }
+    //표준 입력 (stdin, fd == 0)인 경우 읽기 전용이므로 쓸 수 없음
+    else if (fd == STDIN_FILENO) {
+        return -1;
+    }
+    //그 외의 경우 (일반 파일 디스크립터 또는 잘못된 fd 번호)
+    else {
+        struct thread *curr = thread_current ();
+
+        // FD 유효성 검사. 범위를 벗어나거나 열린 파일이 없으면 -1 반환
+        if (fd < 2 || fd >= curr->fd_cap || curr->fd_arr[fd] == NULL) {
+            return -1;
+        }
+
+        // 장부에서 실제 파일 객체 가져오기
+        struct file *fileobj = curr->fd_arr[fd];
+
+        //파일에 쓰기 수행
+        off_t file_written = file_write (fileobj, buffer, size);
+
+        return file_written;
+    }
 }

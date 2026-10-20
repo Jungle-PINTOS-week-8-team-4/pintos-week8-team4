@@ -133,7 +133,19 @@ __do_fork (void *aux) {
 	if (current->pml4 == NULL)
 		goto error;
 
-	process_activate (current);
+	//CPU가 방금 만든 자식의 페이지 테이블(current->pml4)을 바라보도록 CPU의 CR3 register를 갱신
+	process_activate (current);	
+
+	current->fd_cap = 128;
+	current->fd_arr = malloc (sizeof (struct file *) * current->fd_cap);
+	if (current->fd_arr == NULL)
+		goto error;
+	for (int i = 0; i < current->fd_cap; i++) {
+		current->fd_arr[i] = NULL;
+	}
+	current->next_fd = 2;
+
+
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
 	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
@@ -148,7 +160,18 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	//부모가 열어둔 파일 장부(fd_arr)를 처음부터 끝까지 돌면서,
+	//존재하는 파일 객체들을 file_duplicate로 각각 복사하여 자식의 장부에도 똑같이 꽂아줌
+	for (int i = 0; i < parent->fd_cap; i++) {
+        if (parent->fd_arr[i] != NULL) {
+            struct file *dup_file = file_duplicate (parent->fd_arr[i]);
+            if (dup_file == NULL)
+                goto error;
+            current->fd_arr[i] = dup_file;
+        }
+	}
 
+	//프로세스 구동을 위한 초기화
 	process_init ();
 
 	
@@ -231,6 +254,17 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
+	//malloc으로 할당했던 fd_table을 해제
+	if (curr->fd_arr != NULL) {
+		for (int i = 2; i < curr->fd_cap; i++) {
+			if (curr->fd_arr[i] != NULL) {
+				file_close (curr->fd_arr[i]);
+				curr->fd_arr[i] = NULL;
+			}
+		}
+		free (curr->fd_arr);
+		curr->fd_arr = NULL;
+	}
 	process_cleanup ();
 }
 
@@ -356,6 +390,15 @@ load (char *file_name, struct intr_frame *if_) {
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ()); 
+
+	t->fd_cap = 128;
+	t->fd_arr = malloc (sizeof (struct file *) * t->fd_cap);
+	if (t->fd_arr == NULL)
+		goto done;
+	for (int i = 0; i < t->fd_cap; i++) {
+		t->fd_arr[i] = NULL;
+	}
+	t->next_fd = 2;
 
 	char *saveptr; 
 	file_name = strtok_r(file_name, " ", &saveptr); 
