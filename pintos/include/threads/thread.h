@@ -100,6 +100,8 @@ struct thread {
 	
 	/* wake time*/
 	int64_t wakeup_tick;				/* Wakeup time. _ljw */
+	struct file **fd_arr;   // 파일 포인터들을 담을 배열
+    int fd_cap;          // FD 테이블의 최대 크기
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
