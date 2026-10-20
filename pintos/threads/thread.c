@@ -14,6 +14,8 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#include "threads/init.h"
+#include "threads/malloc.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -23,6 +25,12 @@
 /* Random value for basic thread
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
+
+
+struct process_status **process_status_arr;
+struct lock process_status_arr_lock;
+int process_status_arr_cnt = 0;
+int process_status_arr_cap = 0;
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -109,7 +117,7 @@ bool thread_priority_less(const struct list_elem *_a, const struct list_elem *_b
 void
 thread_init (void) {
 	ASSERT (intr_get_level () == INTR_OFF);
-
+	
 	/* Reload the temporal gdt for the kernel
 	 * This gdt does not include the user context.
 	 * The kernel will rebuild the gdt with user context, in gdt_init (). */
@@ -123,6 +131,10 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	
+	#ifdef USERPROG
+	lock_init(&process_status_arr_lock);
+	#endif
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -206,6 +218,41 @@ thread_create (const char *name, int priority,
 	/* Initialize thread. */
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
+	
+	lock_acquire(&process_status_arr_lock);
+	// register tid info on process_status_arr
+	if (process_status_arr_cap <= tid) {
+		int new_cap = process_status_arr_cap == 0 ? 4 : process_status_arr_cap;
+		while (new_cap <= tid)
+			new_cap *= 2;
+
+		struct process_status **new_arr =
+			realloc (process_status_arr, new_cap * sizeof *new_arr);
+		if (new_arr == NULL) {
+			palloc_free_page (t);
+			return TID_ERROR;
+		}
+
+		memset (new_arr + process_status_arr_cap, 0,
+				(new_cap - process_status_arr_cap) * sizeof *new_arr);
+		process_status_arr = new_arr;
+		process_status_arr_cap = new_cap;
+	}
+
+	struct process_status *p_stat = malloc(sizeof(struct process_status));
+	if (p_stat == NULL) {
+		palloc_free_page (t);
+		return TID_ERROR;
+	}
+	process_status_arr[tid] = p_stat;
+	p_stat->exit_code = -1;
+	p_stat->pid = tid;
+	sema_init(&p_stat->sema, 0);
+
+	lock_release(&process_status_arr_lock);
+	
+	list_push_back(&thread_current()->child_list, &p_stat->elem); // 생성하는 스레드는 항상 부모 스레드임.
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -298,9 +345,15 @@ thread_exit (void) {
 	ASSERT (!intr_context ());
 
 #ifdef USERPROG
-	process_exit ();
-#endif
+	if(!thread_tests){
+		process_exit ();
+	}
+	
 
+
+#endif
+	// main 스레드는 process status 배열에 없음
+	
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
@@ -467,11 +520,15 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority_orig = priority;
 	t->magic = THREAD_MAGIC;
 	t->waiting_thread = NULL;
+	list_init(&t->child_list);
 	list_init(&t->acquired_lock); 
-	t->fd_cap = 0;
-	t->fd_arr = NULL;
-	
 
+#ifdef USERPROG
+	t->fd_arr = NULL;
+	t->fd_cap = 0;
+#endif
+
+}
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
