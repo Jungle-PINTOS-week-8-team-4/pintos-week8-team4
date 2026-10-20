@@ -151,6 +151,17 @@ __do_fork (void *aux) {
 
 	process_init ();
 
+	
+	current->fd_cap = parent->fd_cap;
+	current->fd_cnt = parent->fd_cnt;
+	current->fd_arr = calloc(parent->fd_cap, sizeof(struct file *));
+	for(int i = 0; i < parent->fd_cnt; i++){
+		if(parent->fd_arr[i] != NULL) {
+			current->fd_arr[i] = file_duplicate(parent->fd_arr[i]);
+		}
+	}
+	
+	sema_up(&process_status_arr[current->tid]->sema);
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret (&if_);
