@@ -3,7 +3,7 @@
    
    We count how many children your kernel was able to execute
    before it fails to start a new process.  We require that,
-   if a process doesn't actually get to start, exec() must
+   if a process doesn't actually ge to start, exec()t must
    return -1, not a valid PID.
 
    We repeat this process 10 times, checking that your kernel

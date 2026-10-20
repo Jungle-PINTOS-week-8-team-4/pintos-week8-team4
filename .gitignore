@@ -26,6 +26,9 @@ core
 *~
 *.swp
 
+# 개인 VS Code 디버그 설정
+.vscode/
+
 # macOS
 .DS_Store
 

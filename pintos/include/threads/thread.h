@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -23,10 +24,23 @@ enum thread_status {
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
+struct process_status {
+	struct list_elem elem;
+	struct semaphore sema;
+	int exit_code; // exit_code 가 0이면 실행중, -1이면 이미 확인했거나/ 오류거나 등 /
+	tid_t pid;
+};
+
+extern struct lock process_status_arr_lock;
+extern struct process_status **process_status_arr;
+extern int process_status_arr_cnt;
+extern int process_status_arr_cap;
+
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
 
 /* A kernel thread or user process.
  *
@@ -88,27 +102,30 @@ typedef int tid_t;
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
+
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Effective Priority. */
 	int priority_orig;					/* Base Priority to revert priority donation*/
 	
 	struct thread *waiting_thread;
+	
 	struct list acquired_lock;
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 	
 	/* wake time*/
 	int64_t wakeup_tick;				/* Wakeup time. _ljw */
-	struct file **fd_arr;   // 파일 포인터들을 담을 배열
-    int fd_cap;          // FD 테이블의 최대 크기
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
 	struct file **fd_arr;
-	int fd_cnt;
 	int fd_cap;
+
+	struct list child_list;
+	// struct thread *parent_thread;
+	// struct intr_frame if_; // used for process fork
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
