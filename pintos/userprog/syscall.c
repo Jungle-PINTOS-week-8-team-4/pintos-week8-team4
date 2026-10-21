@@ -102,8 +102,7 @@ The caller's registers are accessible to struct intr_frame passed to it. (struct
 			f->R.rax = wait(f->R.rdi);
 			return;
 		case SYS_CREATE:
-			if (f->R.rdi == NULL || !is_user_vaddr (f->R.rdi))
-        		exit (-1);
+			check_address((const void *) f->R.rdi);
 			f->R.rax = filesys_create((char *)f->R.rdi, (unsigned) f->R.rsi);
 			break;
 		case SYS_REMOVE:
@@ -218,7 +217,7 @@ static int open (const char *file) {
 		if(new_arr != NULL)
 			*fd_arr = new_arr;
 		else goto fail;
-		memset(&(*fd_arr)[curr->fd_cap], 0, (curr->fd_cap / 2) * sizeof(**fd_arr));
+		memset(&(*fd_arr)[curr->fd_cap/2], 0, (curr->fd_cap / 2) * sizeof(**fd_arr));
 	} else goto fail;
 
 	curr->fd_arr[curr->fd_cap / 2] = f;
