@@ -230,6 +230,7 @@ thread_create (const char *name, int priority,
 			realloc (process_status_arr, new_cap * sizeof *new_arr);
 		if (new_arr == NULL) {
 			palloc_free_page (t);
+			lock_release(&process_status_arr_lock);
 			return TID_ERROR;
 		}
 
