@@ -104,8 +104,7 @@ The caller's registers are accessible to struct intr_frame passed to it. (struct
 			f->R.rax = wait(f->R.rdi);
 			return;
 		case SYS_CREATE:
-			if (f->R.rdi == NULL || !is_user_vaddr (f->R.rdi))
-        		exit (-1);
+			check_address((const void *) f->R.rdi);
 			f->R.rax = filesys_create((char *)f->R.rdi, (unsigned) f->R.rsi);
 			break;
 		case SYS_REMOVE:
@@ -213,7 +212,6 @@ static int open (const char *file) {
 	for(int i = 0; i < curr->fd_cap; i++){
 		if(curr->fd_arr[i] == NULL) {
 			curr->fd_arr[i] = f;
-			file_deny_write(f);
 			return i + 2;
 		}
 	}
@@ -227,7 +225,6 @@ static int open (const char *file) {
 	} else goto fail;
 
 	curr->fd_arr[curr->fd_cap / 2] = f;
-	file_deny_write(f);
 	return (curr->fd_cap / 2) + 2;
 
 fail:
@@ -255,7 +252,7 @@ int write (int fd, const void *buffer, unsigned size) {
         struct thread *curr = thread_current ();
 
         // FD 유효성 검사. 범위를 벗어나거나 열린 파일이 없으면 -1 반환
-        if (fd < 2 || fd - 2 >= curr->fd_cap || curr->fd_arr[fd] == NULL) {
+        if (fd < 2 || fd - 2 >= curr->fd_cap || curr->fd_arr[fd-2] == NULL) {
             return -1;
         }
 
