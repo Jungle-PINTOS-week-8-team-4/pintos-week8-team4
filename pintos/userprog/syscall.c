@@ -209,7 +209,6 @@ static int open (const char *file) {
 	for(int i = 0; i < curr->fd_cap; i++){
 		if(curr->fd_arr[i] == NULL) {
 			curr->fd_arr[i] = f;
-			file_deny_write(f);
 			return i + 2;
 		}
 	}
@@ -223,7 +222,6 @@ static int open (const char *file) {
 	} else goto fail;
 
 	curr->fd_arr[curr->fd_cap / 2] = f;
-	file_deny_write(f);
 	return (curr->fd_cap / 2) + 2;
 
 fail:
@@ -251,7 +249,7 @@ int write (int fd, const void *buffer, unsigned size) {
         struct thread *curr = thread_current ();
 
         // FD 유효성 검사. 범위를 벗어나거나 열린 파일이 없으면 -1 반환
-        if (fd < 2 || fd - 2 >= curr->fd_cap || curr->fd_arr[fd] == NULL) {
+        if (fd < 2 || fd - 2 >= curr->fd_cap || curr->fd_arr[fd-2] == NULL) {
             return -1;
         }
 

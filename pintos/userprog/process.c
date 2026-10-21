@@ -432,6 +432,7 @@ load (char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	file_deny_write (file);//추가
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
