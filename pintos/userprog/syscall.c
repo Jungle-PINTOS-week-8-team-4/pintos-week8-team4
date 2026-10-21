@@ -18,6 +18,15 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
+static void check_address (const void *addr) {
+	struct thread *curr = thread_current ();
+	// 1. NULL이거나 유저 가상 메모리 범위를 벗어났는지 확인
+	// 2. 커널 영역이거나 페이지 테이블(pml4)에 실제로 매핑된 주소인지 확인
+	if (addr == NULL || !is_user_vaddr (addr) || pml4_get_page (curr->pml4, addr) == NULL) {
+		exit (-1);
+	}
+}
+
 static int read (int fd, void *buffer, unsigned size);
 static int write (int fd, const void *buffer, unsigned size);
 static void exit (int status);
@@ -150,8 +159,8 @@ static void close (int fd) { // TODO: 프로세스 종료시 전부 close 필요
 
 static int read (int fd, void *buffer, unsigned size) {
 	struct thread *curr = thread_current();
-	if (buffer == NULL || !is_user_vaddr (buffer))
-	exit (-1);
+	check_address(buffer); 
+	check_address(buffer + size -1);
 
 	if(fd == STDIN_FILENO) {
 		for(unsigned i = 0; i < size; i++ ){
@@ -179,6 +188,8 @@ static int read (int fd, void *buffer, unsigned size) {
 }
 
 static int open (const char *file) {
+
+	check_address(file); 
 	struct thread *curr = thread_current();
 	struct file*** fd_arr = &curr->fd_arr;
 
@@ -222,10 +233,9 @@ fail:
 
 int write (int fd, const void *buffer, unsigned size) {
     //버퍼 포인터 유효성 검사. NULL이거나 유저 메모리 영역이 아니면 프로세스 종료
-    if (buffer == NULL || !is_user_vaddr (buffer))
-        exit (-1);
-	// check_address(buffer); TODO: check addr 함수 확인하기
-	// check_address(buffer + size -1);
+
+	check_address(buffer); 
+	check_address(buffer + size -1);
 
     //표준 출력 (stdout, fd == 1)인 경우 콘솔에 쓰기
     if (fd == STDOUT_FILENO) {      
@@ -256,6 +266,7 @@ int write (int fd, const void *buffer, unsigned size) {
 }
 
 static tid_t fork (const char *thread_name, struct intr_frame *f) {
+	check_address(thread_name); 
 
 	struct intr_frame *intr_f = malloc(sizeof(*f));
 	*intr_f = *f;
@@ -284,6 +295,7 @@ static int wait (tid_t pid){
 static tid_t exec(char *cmd_line) { // TODO: exec도 file read하므로 다른 file read syscall과 동시에 작업하면 안됨
 /* Make a copy of FILE_NAME.
 * Otherwise there's a race between the caller and load(). */
+	check_address(cmd_line); 
 
 	char *fn_copy = palloc_get_page (1);
 
