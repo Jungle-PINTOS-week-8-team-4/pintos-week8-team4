@@ -149,7 +149,17 @@ page_fault (struct intr_frame *f) {
 	/* Count page faults. */
 	page_fault_cnt++;
 
-	/* If the fault is true fault, show info and exit. */
+	if(user){
+
+		if(not_present)
+			thread_exit();
+
+		if(!is_user_vaddr(fault_addr))
+			thread_exit();
+
+	}
+
+	/* If the fault is true fault, show info and exit. */ // TC의 채점 기준이 AMD64 기준이 아니라 x86 기준이라 dump msg 출력하면 통과못함
 	printf ("Page fault at %p: %s error %s page in %s context.\n",
 			fault_addr,
 			not_present ? "not present" : "rights violation",

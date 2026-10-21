@@ -34,8 +34,10 @@ static int open (const char *file);
 static void close (int fd);
 static tid_t fork (const char *thread_name, struct intr_frame *f);
 static int wait (tid_t pid);
-static tid_t exec(char *file_name);
+static int exec(char *file_name);
 static int filesize(int fd);
+static void seek (int fd, unsigned position);
+static unsigned tell(int fd);
 struct lock syscall_lock;
 /* System call.
  *
@@ -49,7 +51,7 @@ struct lock syscall_lock;
 #define MSR_STAR 0xc0000081         /* Segment selector msr */
 #define MSR_LSTAR 0xc0000082        /* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
-#define MAX_FD_CAP 64 // TODO: 100 이하로, TC 통과할 수준으로 만들기. tc 분석해야함
+#define MAX_FD_CAP 128 // TODO: 100 이하로, TC 통과할 수준으로 만들기. tc 분석해야함
 
 void
 syscall_init (void) {
@@ -123,8 +125,10 @@ The caller's registers are accessible to struct intr_frame passed to it. (struct
 			f->R.rax = write(f->R.rdi, (char *)f->R.rsi, f->R.rdx);
 			break;
 		case SYS_SEEK:
+			seek (f->R.rdi, f->R.rsi);
 			break;
 		case SYS_TELL:
+			f->R.rax = tell(f->R.rdi);
 			break;
 		case SYS_CLOSE:
 			close(f->R.rdi);
@@ -217,7 +221,7 @@ static int open (const char *file) {
 		if(new_arr != NULL)
 			*fd_arr = new_arr;
 		else goto fail;
-		memset(&(*fd_arr)[curr->fd_cap/2], 0, (curr->fd_cap / 2) * sizeof(**fd_arr));
+		memset(&(*fd_arr)[curr->fd_cap / 2], 0, (curr->fd_cap / 2) * sizeof(**fd_arr));
 	} else goto fail;
 
 	curr->fd_arr[curr->fd_cap / 2] = f;
@@ -273,6 +277,40 @@ static tid_t fork (const char *thread_name, struct intr_frame *f) {
 	return pid;
 }
 
+static void seek (int fd, unsigned position) {
+	struct thread *curr = thread_current();
+
+	if(fd < 2) {
+		return;
+	} else if( fd - 2 < curr->fd_cap ){
+		struct file **f = &(curr->fd_arr[fd - 2]);
+		if(f == NULL)
+			return;
+		else {
+			file_seek(*f, position);
+		}
+	} else {
+		return;
+	}
+}
+
+static unsigned tell(int fd) {
+	struct thread *curr = thread_current();
+
+	if(fd < 2) {
+		return 0;
+	} else if( fd - 2 < curr->fd_cap ){
+		struct file **f = &(curr->fd_arr[fd - 2]);
+		if(f == NULL)
+			return 0;
+		else {
+			return file_tell(*f);
+		}
+	} else {
+		return 0;
+	}
+}
+
 static void exit (int status){
 	struct thread *curr = thread_current();
 	process_status_arr[curr->tid]->exit_code = status;
@@ -289,7 +327,7 @@ static int wait (tid_t pid){
 	// 찾은 status struct free하기
 }
 
-static tid_t exec(char *cmd_line) { // TODO: exec도 file read하므로 다른 file read syscall과 동시에 작업하면 안됨
+static int exec(char *cmd_line) { // TODO: exec도 file read하므로 다른 file read syscall과 동시에 작업하면 안됨
 /* Make a copy of FILE_NAME.
 * Otherwise there's a race between the caller and load(). */
 	check_address(cmd_line); 
@@ -300,7 +338,8 @@ static tid_t exec(char *cmd_line) { // TODO: exec도 file read하므로 다른 f
 		return TID_ERROR;
 
 	strlcpy(fn_copy, cmd_line, PGSIZE);
-	return process_exec(fn_copy); // 성공시 다시 돌아오지 않음
+	if(process_exec(fn_copy) == -1) // 성공시 다시 돌아오지 않음
+		exit(-1);
 }
 
 static int filesize(int fd) {

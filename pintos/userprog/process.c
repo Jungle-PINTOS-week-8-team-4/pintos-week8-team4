@@ -414,13 +414,6 @@ load (char *file_name, struct intr_frame *if_) {
 	char *arg_ptr[MAX_ARG_CNT]; // limits max. arg cnt to MAX_ARG_CNT
 	int argc = 0;
 	
-
-	/* Allocate and activate page directory. */
-	t->pml4 = pml4_create ();
-	if (t->pml4 == NULL)
-		goto done;
-	process_activate (thread_current ()); 
-
 	char *saveptr; 
 	file_name = strtok_r(file_name, " ", &saveptr); 
 	arg_ptr[argc++] = 0; // puts offset from arr. start
@@ -431,6 +424,13 @@ load (char *file_name, struct intr_frame *if_) {
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
+
+	/* Allocate and activate page directory. */
+	t->pml4 = pml4_create ();
+	if (t->pml4 == NULL)
+		goto done;
+	process_activate (thread_current ()); 
+
 
 	file_deny_write (file);//추가
 	/* Read and verify executable header. */
